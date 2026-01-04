@@ -12,12 +12,13 @@ mcp = FastMCP("Weather Service - OpenWeatherMap API")
 
 # Tool implementation
 @mcp.tool()
-async def get_current_weather(city: str, units: str) -> str:
-    """Get the current weather for a specified city. Imperial units for Fahrenheit, metric for Celsius."""
+async def get_current_weather(lat: float, lon: float, units: str) -> str:
+    """Get the current weather for a specified location (coordinates). Imperial units for Fahrenheit, metric for Celsius."""
 
     url = "http://api.openweathermap.org/data/2.5/weather"
     params = {
-        "q": city,
+        "lat": lat,
+        "lon": lon,
         "appid": API_KEY,
         "units": units
     }
@@ -28,7 +29,7 @@ async def get_current_weather(city: str, units: str) -> str:
         response = await client.get(url, params=params)
         
         if response.status_code != 200:
-            return f"Error: Could not find weather for '{city}'. (Status: {response.status_code})"
+            return f"Error: Could not find weather for '{lat}, {lon}'. (Status: {response.status_code})"
         
         data = response.json()
         temp = data['main']['temp']
@@ -37,16 +38,16 @@ async def get_current_weather(city: str, units: str) -> str:
         wind_speed = data['wind']['speed']
         wind_direction = data['wind']['deg']
 
-        return f"The current weather in {city} is {desc} with a temperature of {temp}{unit_symbol} and humidity of {humidity}%. The wind speed is {wind_speed} m/s at {wind_direction}°."
-
+        return f"The current weather in ({lat}, {lon}) is {desc} with a temperature of {temp}{unit_symbol} and humidity of {humidity}%. The wind speed is {wind_speed} m/s at {wind_direction}°."
 
 
 @mcp.tool()
-async def get_5_day_forecast(city: str, units: str):
-    """Get the 5-day weather forecast for a specified city. Imperial units for Fahrenheit, metric for Celsius."""
+async def get_5_day_forecast(lat: float, lon: float, units: str):
+    """Get the 5-day weather forecast for a specified location (coordinates). Imperial units for Fahrenheit, metric for Celsius."""
     url = "http://api.openweathermap.org/data/2.5/forecast"
     params = {
-        "q": city,
+        "lat": lat,
+        "lon": lon,
         "appid": API_KEY,
         "units": units
     }
@@ -57,8 +58,7 @@ async def get_5_day_forecast(city: str, units: str):
         response = await client.get(url, params=params)
         
         if response.status_code != 200:
-            return f"Error: Could not fetch forecast for {city}."
-        
+            return f"Error: Could not fetch forecast for ({lat}, {lon})."
         data = response.json()
         forecast_list = data['list']
     
@@ -77,10 +77,10 @@ async def get_5_day_forecast(city: str, units: str):
                 f"Humidity: {humidity}%, Wind: {wind_speed} m/s at {wind_direction}°"
             )
 
-        return f"5-Day Forecast for {city}:\n" + "\n".join(daily_summaries)
+        return f"5-Day Forecast for ({lat}, {lon}):\n" + "\n".join(daily_summaries)
 
 @mcp.tool()
-async def get_air_quality(lat: str, lon: str):
+async def get_air_quality(lat: float, lon: float):
     """Get the air quality for a specified location (coordinates)."""
     url = "http://api.openweathermap.org/data/2.5/air_pollution"
     params = {
@@ -99,7 +99,7 @@ async def get_air_quality(lat: str, lon: str):
         return f"The air quality index at coordinates ({lat}, {lon}) is {aqi}."
 
 @mcp.tool()
-async def get_uv_index(lat: str, lon: str) -> str:
+async def get_uv_index(lat: float, lon: float) -> str:
     """Get the UV index for a specified location (coordinates)."""
 
     url = "https://api.open-meteo.com/v1/forecast"
@@ -118,27 +118,37 @@ async def get_uv_index(lat: str, lon: str) -> str:
     return f"The maximum UV index at coordinates ({lat}, {lon}) today is {uv_max}."
 
 @mcp.tool()
-async def search_coordinates(city: str):
-    """Search for the geographical coordinates of a city."""
+async def get_coordinates(location: str) -> str:
+    """
+    Converts a location name (city, state, country) into latitude and longitude.
+    Example input: 'Blue Mountain, Ontario, Canada'
+    """
     url = "http://api.openweathermap.org/geo/1.0/direct"
     params = {
-        "q": city,
+        "q": location,
         "limit": 1,
-        "appid": API_KEY,
+        "appid": API_KEY
     }
+
     async with httpx.AsyncClient() as client:
         response = await client.get(url, params=params)
         
         if response.status_code != 200:
-            return f"Error: Could not find coordinates for '{city}'."
-        
+            return f"Error: API call failed with status {response.status_code}"
+            
         data = response.json()
+        
         if not data:
-            return f"Error: No data found for '{city}'."
-    lat = data[0]['lat']
-    lon = data[0]['lon']
-    return f"The coordinates of {city} are Latitude: {lat}, Longitude: {lon}."
-
+            return f"Error: Could not find coordinates for '{location}'."
+        
+        place = data[0]
+        lat = place['lat']
+        lon = place['lon']
+        name = place['name']
+        state = place.get('state', 'N/A')
+        
+        return f"Location: {name}, {state} | Latitude: {lat}, Longitude: {lon}"
+    
 # tool with sampling
 @mcp.tool()
 async def get_location_recommendation(city: str, region: str, vacation_type: Optional[str], ctx: Context) -> str:
@@ -176,9 +186,11 @@ def outfit_planner(city: str) -> str:
     """Prepares a clothing recommendation for the user!"""
     return f"""
     Please perform a comprehensive environmental check for {city}:
-    1. Call 'get_current_weather' for immediate conditions. Check all parameters including temperature, humidity, and wind.
-    2. Call 'get_5_day_forecast' to see if conditions will change soon.
-    3. Call 'get_uv_index' to check for sun protection needs.
+    1. Call 'get_coordinates' to get latitude and longitude.
+    2. Use those coordinates to:
+     - Call 'get_current_weather' for immediate conditions. Check all parameters including temperature, humidity, and wind.
+     - Call 'get_5_day_forecast' to see if conditions will change soon.
+     - Call 'get_uv_index' to check for sun protection needs.
     
     Based on all this data, give me a detailed 'What to Wear' list. 
     Be specific about layers, footwear, and accessories like sunglasses or umbrellas. You can ask the user followup questions including their type of clothing style eg baggy, loose, formal, etc.
