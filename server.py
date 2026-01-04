@@ -13,7 +13,7 @@ mcp = FastMCP("Weather Service - OpenWeatherMap API")
 # Tool implementation
 @mcp.tool()
 async def get_current_weather(lat: float, lon: float, units: str) -> str:
-    """Get the current weather for a specified location (coordinates). Imperial units for Fahrenheit, metric for Celsius."""
+    """Get the current weather for a specified location (coordinates). Uses positive float for North latitudes, negative for South latitudes. Uses positive longitude for East longitudes, negative for West longitudes. Imperial units for Fahrenheit, metric for Celsius."""
 
     url = "http://api.openweathermap.org/data/2.5/weather"
     params = {
@@ -149,11 +149,12 @@ async def get_coordinates(location: str) -> str:
         
         return f"Location: {name}, {state} | Latitude: {lat}, Longitude: {lon}"
     
-# tool with sampling
+# tool with sampling - not quite sure if this will work well due to the recursive nature.
 @mcp.tool()
 async def get_location_recommendation(city: str, region: str, vacation_type: Optional[str], ctx: Context) -> str:
     """User provides city they are planning to visit and region for their vacation. Checks weather conditions in coming few days and compares if the city would be good to visit for intended vacation type. If not, suggests an alternative city in the same region with better weather conditions for the vacation type."""
 
+    lat, lon = await ctx.call_tool("get_coordinates", city)
     current_weather_data = await get_current_weather(city, "metric")
     weather_data_5_days = await get_5_day_forecast(city, "metric")
 
