@@ -1,4 +1,5 @@
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Context
+from typing import Optional
 from dotenv import load_dotenv
 import os
 import httpx
@@ -12,7 +13,7 @@ mcp = FastMCP("Weather Service - OpenWeatherMap API")
 # Tool implementation
 @mcp.tool()
 async def get_current_weather(city: str, units: str) -> str:
-    """Get the current weather for a specified city."""
+    """Get the current weather for a specified city. Imperial units for Fahrenheit, metric for Celsius."""
 
     url = "http://api.openweathermap.org/data/2.5/weather"
     params = {
@@ -42,7 +43,7 @@ async def get_current_weather(city: str, units: str) -> str:
 
 @mcp.tool()
 async def get_5_day_forecast(city: str, units: str):
-    """Get the 5-day weather forecast for a specified city."""
+    """Get the 5-day weather forecast for a specified city. Imperial units for Fahrenheit, metric for Celsius."""
     url = "http://api.openweathermap.org/data/2.5/forecast"
     params = {
         "q": city,
@@ -137,6 +138,37 @@ async def search_coordinates(city: str):
     lat = data[0]['lat']
     lon = data[0]['lon']
     return f"The coordinates of {city} are Latitude: {lat}, Longitude: {lon}."
+
+# tool with sampling
+@mcp.tool()
+async def get_location_recommendation(city: str, region: str, vacation_type: Optional[str], ctx: Context) -> str:
+    """User provides city they are planning to visit and region for their vacation. Checks weather conditions in coming few days and compares if the city would be good to visit for intended vacation type. If not, suggests an alternative city in the same region with better weather conditions for the vacation type."""
+
+    current_weather_data = await get_current_weather(city, "metric")
+    weather_data_5_days = await get_5_day_forecast(city, "metric")
+
+    result = await ctx.sample(
+        f"""The user is planning a {vacation_type} vacation in {city}, {region}. 
+        The current weather is: {current_weather_data}
+        The 5-day forecast is: {weather_data_5_days}.
+
+        Based on all this data, give me a detailed recommendation on whether this city is suitable for the vacation type and what to expect. If not, suggest an alternative city in the same region with better weather conditions for the vacation type. Use the get_location_recommendation tool to find the alternative city.
+        """
+    )
+
+    return result.text   
+
+# Resource implementation
+@mcp.resource("weather://safety-manual")
+def weather_safety_manual() -> str:
+    """A guide on staying safe in varying weather conditions."""
+
+    return """
+    # Weather Safety Manual
+    - If UV > 8: Wear a hat and stay in shade.
+    - If Wind > 40mph: Secure loose outdoor furniture.
+    - If Humidity > 90%: Stay hydrated and watch for heat stroke.
+    """
 
 # Prompt implementation
 @mcp.prompt()
