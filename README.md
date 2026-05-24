@@ -1,1 +1,1 @@
-Simple Weather MCP usin OpenWeatherMap API
+Simple Weather MCP using OpenWeatherMap API
